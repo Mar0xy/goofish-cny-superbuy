@@ -1,4 +1,4 @@
-// content.js (FINAL: Smart Live Update - Text-Only Update on Fee Toggle)
+// content.js (FINAL: Smart Live Update - Text-Only Update on Fee/Rate Toggle, including Dynamic Rate)
 
 // Selectors for inner price wrappers
 const PRICE_PARTS_SELECTORS = [
@@ -10,7 +10,8 @@ const PRICE_PARTS_SELECTORS = [
 // Regex for simple prices (e.g., in body text, discount boxes)
 const SIMPLE_PRICE_REGEX = /(¥|元|￥)\s*(\d[\d,.]*)/g; 
 
-let cnyPerUsd = null;
+let conversionRates = {}; // { standard: 6.8, wise: 6.7, transfer: 6.7 }
+let selectedRateType = 'standard';
 let isModifyingDOM = false;
 let includeSuperbuyFee = false;
 const SUPERBUY_FEE_CNY = 20; 
@@ -21,22 +22,50 @@ const SUPERBUY_FEE_CNY = 20;
  * Creates the converted USD text based on price and conversion type.
  */
 function getUsdText(cnyPrice, isTextNodeConversion) {
-    let displayCnyPrice = cnyPrice;
-    let usdPrice = cnyPrice / cnyPerUsd;
-    let usdText;
-
+    const standardRate = conversionRates['standard'];
+    if (!standardRate) return '';
+    
+    let cnyPriceToConvert = cnyPrice;
+    
+    // 1. Apply optional Superbuy Fee first, if enabled (applies to all methods)
     if (includeSuperbuyFee) {
-        displayCnyPrice = cnyPrice + SUPERBUY_FEE_CNY;
-        usdPrice = displayCnyPrice / cnyPerUsd;
-        // Text node conversion always uses the (~$ prefix
-        usdText = isTextNodeConversion 
-            ? ` (~$${usdPrice.toFixed(2)} USD, Fee Incl. ¥${displayCnyPrice.toFixed(2)})`
-            : `$${usdPrice.toFixed(2)} USD (Fee Incl. ¥${displayCnyPrice.toFixed(2)})`;
-    } else {
-        usdText = isTextNodeConversion
-            ? ` (~$${usdPrice.toFixed(2)} USD)`
-            : `$${usdPrice.toFixed(2)} USD`;
+        cnyPriceToConvert += SUPERBUY_FEE_CNY;
     }
+
+    let usdPrice;
+    let usdText;
+    
+    if (selectedRateType === 'other_payments') {
+        const FIXED_FEE = 0.3; // USD
+        const PERCENTAGE_FEE = 0.05; // 5%
+
+        // Step A: Convert total CNY (item + optional Superbuy fee) to USD Payable Amount using the Standard Rate
+        const usdPayableAmount = cnyPriceToConvert / standardRate;
+        
+        // Step B: Calculate the Actual payment amount (Final USD Price) using the "Other Payment" formula
+        // Formula: Actual payment amount (USD) = (Payable (USD) + Fixed Fee) / (1 - Percentage Fee)
+        usdPrice = (usdPayableAmount + FIXED_FEE) / (1 - PERCENTAGE_FEE);
+        
+        // Text display includes a note about the calculation model
+        const feeNote = includeSuperbuyFee ? `, Agent Fee Incl.` : '';
+        usdText = isTextNodeConversion
+            ? ` (~$${usdPrice.toFixed(2)} USD, Other Model${feeNote})`
+            : `$${usdPrice.toFixed(2)} USD (Other Model${feeNote})`;
+        
+    } else {
+        // Use the selected remittance rate (standard, wise, transfer)
+        const rateToUse = conversionRates[selectedRateType] || standardRate;
+        
+        usdPrice = cnyPriceToConvert / rateToUse; 
+        
+        // Text display uses the original format for standard/remittance rates
+        // Note: cnyPriceToConvert already includes the optional Superbuy Fee if toggled
+        const feeNote = includeSuperbuyFee ? `, Fee Incl. ¥${cnyPriceToConvert.toFixed(2)}` : '';
+        usdText = isTextNodeConversion
+            ? ` (~$${usdPrice.toFixed(2)} USD${feeNote})`
+            : `$${usdPrice.toFixed(2)} USD${feeNote}`;
+    }
+    
     return usdText;
 }
 
@@ -66,7 +95,7 @@ function removeExistingConversions() {
 
 
 /**
- * Extracts the full CNY price from a container. (Unchanged)
+ * Extracts the full CNY price from a container.
  */
 function extractCnyPrice(priceContainer) {
     let priceString = '';
@@ -95,10 +124,9 @@ function extractCnyPrice(priceContainer) {
 
 /**
  * Handles all nested price structures.
- * Added: Saves the original price in the data-cny-price attribute.
  */
 function handleMultiPartPrice(scopeNode) {
-    if (!cnyPerUsd) return;
+    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
     
     scopeNode.querySelectorAll(PRICE_PARTS_SELECTORS.join(', ')).forEach(priceContainer => {
         if (priceContainer.getAttribute('data-converted-multi') === 'true') {
@@ -114,7 +142,7 @@ function handleMultiPartPrice(scopeNode) {
             const usdSpan = document.createElement('span');
             usdSpan.textContent = usdText;
             usdSpan.setAttribute('data-converted-usd', 'true');
-            usdSpan.setAttribute('data-cny-price', cnyPrice.toString()); // <-- Added: Save original price
+            usdSpan.setAttribute('data-cny-price', cnyPrice.toString()); // Save original price
             
             // --- STYLING LOGIC ---
             if (priceContainer.classList.contains('right-card-main-price--BRE5MkOF')) {
@@ -166,10 +194,9 @@ function handleMultiPartPrice(scopeNode) {
 
 /**
  * Converts prices found within a text node.
- * Added: Saves the original price in the data-cny-price attribute.
  */
 function convertPriceInTextNode(textNode) {
-    if (!cnyPerUsd) return;
+    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
 
     const originalText = textNode.textContent;
     let lastIndex = 0;
@@ -199,7 +226,7 @@ function convertPriceInTextNode(textNode) {
             const usdSpan = document.createElement('span');
             usdSpan.textContent = usdText;
             usdSpan.setAttribute('data-converted-usd', 'true');
-            usdSpan.setAttribute('data-cny-price', cnyPrice.toString()); // <-- Added: Save original price
+            usdSpan.setAttribute('data-cny-price', cnyPrice.toString()); // Save original price
             usdSpan.style.fontWeight = 'bold';
             fragment.appendChild(usdSpan);
             convertedCount++;
@@ -225,10 +252,10 @@ function convertPriceInTextNode(textNode) {
 }
 
 
-// --- DOM Processing and Observer (Unchanged) ---
+// --- DOM Processing and Observer ---
 
 function processNode(node) {
-    if (!cnyPerUsd) return;
+    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
 
     if (node.nodeType === 1 && node.getAttribute('data-converted-usd') === 'true') {
         return;
@@ -253,10 +280,10 @@ function processNode(node) {
 }
 
 /**
- * NEW: Updates only the text content of existing USD spans (non-destructively).
+ * Updates only the text content of existing USD spans (non-destructively).
  */
 function updateOnlyUsdText() {
-    if (!cnyPerUsd) return;
+    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
     
     document.querySelectorAll('[data-converted-usd="true"]').forEach(usdSpan => {
         const cnyPriceAttr = usdSpan.getAttribute('data-cny-price');
@@ -266,7 +293,6 @@ function updateOnlyUsdText() {
         if (isNaN(cnyPrice)) return;
 
         // Determine if it was a text node conversion (with "~")
-        // This is necessary to use the correct prefix (with/without ~)
         const isTextNodeConversion = usdSpan.textContent.includes(' (~'); 
 
         const usdText = getUsdText(cnyPrice, isTextNodeConversion);
@@ -281,7 +307,7 @@ function updateOnlyUsdText() {
         }
     });
     
-    console.log(`[$] Live Update (Text-Only) performed. Superbuy Fee is: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
+    console.log(`[$] Live Update (Text-Only) performed. Rate Type: ${selectedRateType}. Superbuy Fee: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
 }
 
 
@@ -290,8 +316,8 @@ function updateOnlyUsdText() {
  * Performs a text-only update for live changes.
  */
 function forceReconversion() {
-    if (!cnyPerUsd) {
-        console.warn("[$] Rate not available, cannot update live.");
+    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') {
+        console.warn("[$] Rate not available for selected type, cannot update live.");
         return;
     }
 
@@ -307,18 +333,19 @@ function forceReconversion() {
     processNode(document.body);
     handleMultiPartPrice(document.body);
     
-    console.log(`[$] Full Scan performed (Initial conversion). Superbuy Fee is: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
+    console.log(`[$] Full Scan performed (Initial conversion). Rate Type: ${selectedRateType}. Superbuy Fee: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
 }
 
 function startObserver() {
-    if (!cnyPerUsd) {
-        console.warn("[$] Exchange rate not available yet. Retrying...");
+    if (!conversionRates['standard'] && selectedRateType === 'other_payments') {
+        // If 'other_payments' is selected, we need the standard rate for calculation
+        console.warn("[$] Standard Exchange rate not available yet. Retrying...");
         setTimeout(startObserver, 500); 
         return;
     }
     
     console.log("[$] Goofish USD Converter is active.");
-    console.log(`[$] Superbuy Fee (20 CNY) is: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
+    console.log(`[$] Selected Rate Type: ${selectedRateType}. Superbuy Fee (20 CNY) is: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
 
     processNode(document.body);
     handleMultiPartPrice(document.body); 
@@ -348,7 +375,7 @@ function startObserver() {
 // --- Main Execution and Message Listener ---
 
 browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // Live update for the fee and rate now calls the smart forceReconversion.
+    // 1. Live update for the fee toggle
     if (request.command === "toggle_fee_live" && request.newFeeStatus !== undefined) {
         includeSuperbuyFee = request.newFeeStatus; 
         forceReconversion(); 
@@ -356,32 +383,46 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true;
     }
     
-    if (request.command === "reconvert_live_rate") {
-        browser.storage.local.get("cnyPerUsd")
+    // 2. Live update for the selected rate type
+    if (request.command === "set_rate_type" && request.newRateType !== undefined) {
+         browser.storage.local.get("conversionRates")
           .then(data => {
-            if (data.cnyPerUsd) {
-              cnyPerUsd = data.cnyPerUsd; 
+            // Only require a rate if the selected type is NOT the dynamic one, or if we need the standard rate for the calculation
+            if (data.conversionRates && (data.conversionRates[request.newRateType] || request.newRateType === 'other_payments')) {
+              conversionRates = data.conversionRates;
+              selectedRateType = request.newRateType; 
               forceReconversion(); 
               sendResponse({ success: true });
             } else {
-              sendResponse({ success: false, message: "Rate not found in storage." });
+              sendResponse({ success: false, message: "New rate not found in storage." });
+            }
+          });
+        return true; 
+    }
+    
+    // 3. Live update for the exchange rates (manual rate refresh)
+    if (request.command === "reconvert_live_rate") {
+        browser.storage.local.get(["conversionRates", "selectedRateType"])
+          .then(data => {
+            if (data.conversionRates && (data.conversionRates[data.selectedRateType] || data.selectedRateType === 'other_payments')) {
+              conversionRates = data.conversionRates; 
+              selectedRateType = data.selectedRateType; 
+              forceReconversion(); 
+              sendResponse({ success: true });
+            } else {
+              sendResponse({ success: false, message: "Rates not found in storage." });
             }
           });
         return true; 
     }
 });
 
-browser.storage.local.get(["cnyPerUsd", "includeSuperbuyFee"])
+browser.storage.local.get(["conversionRates", "includeSuperbuyFee", "selectedRateType"])
   .then(data => {
-    if (data.cnyPerUsd) {
-      cnyPerUsd = data.cnyPerUsd;
-      includeSuperbuyFee = data.includeSuperbuyFee === true; 
-      startObserver();
-    } else {
-      console.error("[$] Exchange rate not found in storage. Background script will fetch the rate.");
-      includeSuperbuyFee = data.includeSuperbuyFee === true;
-      startObserver(); 
-    }
+    conversionRates = data.conversionRates || {};
+    includeSuperbuyFee = data.includeSuperbuyFee === true; 
+    selectedRateType = data.selectedRateType || 'standard'; 
+    startObserver();
   })
   .catch(error => {
     console.error("[$] Error fetching settings:", error);
