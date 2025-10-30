@@ -6,6 +6,16 @@
   "icons": {
     "48": "icons/icon-48.png"
   },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "goofish-usd-converter@yuugi.dev",
+	  "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
   "permissions": [
     "storage",
     "https://front.superbuy.com/*",
