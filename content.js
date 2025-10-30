@@ -49,8 +49,8 @@ function getUsdText(cnyPrice, isTextNodeConversion) {
         // Text display includes a note about the calculation model
         const feeNote = includeSuperbuyFee ? `, Agent Fee Incl.` : '';
         usdText = isTextNodeConversion
-            ? ` (~$${usdPrice.toFixed(2)} USD, Other Model${feeNote})`
-            : `$${usdPrice.toFixed(2)} USD (Other Model${feeNote})`;
+            ? ` (~$${usdPrice.toFixed(2)}, Other Model${feeNote})`
+            : `$${usdPrice.toFixed(2)} (Other Model${feeNote})`;
         
     } else {
         // Use the selected remittance rate (standard, wise, transfer)
@@ -62,8 +62,8 @@ function getUsdText(cnyPrice, isTextNodeConversion) {
         // Note: cnyPriceToConvert already includes the optional Superbuy Fee if toggled
         const feeNote = includeSuperbuyFee ? `, Fee Incl. ¥${cnyPriceToConvert.toFixed(2)}` : '';
         usdText = isTextNodeConversion
-            ? ` (~$${usdPrice.toFixed(2)} USD${feeNote})`
-            : `$${usdPrice.toFixed(2)} USD${feeNote}`;
+            ? ` (~$${usdPrice.toFixed(2)}${feeNote})`
+            : `$${usdPrice.toFixed(2)}${feeNote}`;
     }
     
     return usdText;
