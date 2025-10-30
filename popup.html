@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Goofish Settings</title>
+    <style>
+        body { 
+            font-family: sans-serif; 
+            padding: 15px; 
+            width: 300px; /* Wider for the checkbox */
+        }
+        h2 { font-size: 1.2em; border-bottom: 1px solid #eee; padding-bottom: 5px; margin-top: 0; }
+        
+        /* Options-Block Styling */
+        .options-block { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #f0f0f0; }
+        label { display: block; cursor: pointer; font-size: 0.95em; }
+        input[type="checkbox"] { margin-right: 8px; transform: scale(1.1); vertical-align: middle; }
+        .info-text { font-size: 0.8em; color: #666; margin-left: 20px; margin-top: 2px; }
+
+        /* Rate-Update Styling */
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 10px;
+        }
+        button:hover { background-color: #0056b3; }
+        #rateStatus { 
+            font-size: 0.9em; 
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    
+    <h2>Settings</h2>
+    
+    <div class="options-block">
+        <label>
+            <input type="checkbox" id="superbuyFeeCheckbox">
+            Include Superbuy Fee (20 CNY)
+        </label>
+        <p class="info-text">
+            Adds 20 CNY to the price (updates open Goofish pages).
+        </p>
+    </div>
+
+    <h2>Exchange Rate</h2>
+
+    <div id="rateStatus">Loading Status...</div>
+    <button id="updateRateButton">Update Now</button>
+
+    <script src="popup.js"></script>
+</body>
+</html>
