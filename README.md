@@ -10,45 +10,48 @@ The **Goofish USD Price Converter** is a browser extension designed to enhance t
 
 ## Key Features
 
-* **Real-time Conversion:** Converts and displays USD prices next to the original CNY prices on all Goofish pages.
+* **Multiple Conversion Models:** Offers a selector in the popup to choose between three fixed exchange rates (Standard, Wise Remittance, Bank Transfer) and one dynamic fee calculation model for **Other Payment Types**.
 * **Superbuy Exchange Rate:** Fetches the conversion rate directly from the official **Superbuy currency API** for maximum accuracy and relevance to the agent's actual costs.
-* **Automatic Rate Updates:** The exchange rate is automatically fetched and updated in the background every **6 hours**.
+* **Remittance Rates:** Calculates and uses special discounted rates for Wise and Bank Transfers based on Superbuy's remittance discount program.
+* **Dynamic Payment Fee:** Includes a calculation mode for **Other Payment Types** (e.g., PayPal, Credit Card) using Superbuy's formula: `Actual Payment = (Payable USD + $0.30) / (1 - 0.05)`.
 * **Optional Superbuy Fee:** Includes a setting to optionally factor in a fixed **20 CNY Superbuy service fee** into the final USD price calculation, providing a closer estimate of the final *item cost* through the agent.
-* **Live Updates:** Changes to the optional service fee or a manual rate update are instantly applied to all open Goofish tabs.
+* **Live Updates:** Changes to the rate type, fee inclusion, or a manual rate update are instantly applied to all open Goofish tabs.
 
 ---
 
 ## How It Works
 
-The extension is specifically tailored for the **Superbuy** ecosystem, ensuring the estimated USD price reflects the agent's operational environment.
+The extension is specifically tailored for the **Superbuy** ecosystem, ensuring the estimated USD price reflects the agent's operational environment and chosen payment method.
 
 ### 1. Exchange Rate Management (`background.js`)
 
-* The background script is responsible for maintaining the current exchange rate.
-* It calls the **Superbuy currency API** upon extension startup and then every 6 hours via an alarm.
-* The fetched CNY-per-USD rate is stored locally in the browser's storage.
-* When a manual update is triggered from the popup, it fetches the new rate and sends a message to all active Goofish tabs.
+* The background script fetches the Standard Exchange Rate (`RealRate`) and the market rate (`BaseRate`).
+* It fetches the current discount percentages for Wise and Bank Transfers from Superbuy's remittance API.
+* **Fixed Rates:** It calculates the three fixed exchange rates (Standard, Wise, Bank Transfer) using the Superbuy formulas and stores them locally.
+* **Automatic Updates:** Rates are automatically fetched and updated every **6 hours**.
 
 ### 2. Price Conversion (`content.js`)
 
-* The content script runs on all Goofish pages.
-* It monitors the page content (including content loaded dynamically, like when scrolling) and identifies elements containing prices in CNY.
-* It performs the conversion using the stored **Superbuy rate** and appends a new element containing the calculated USD price.
-* If the **"Include Superbuy Fee"** option is enabled, it adds **20 CNY** to the original item price *before* conversion. This helps users budget for the mandatory service charge imposed by the agent.
-* When a live update is received (from the popup or a manual rate refresh), it non-destructively updates the text of the existing USD price labels without re-scanning the entire page.
+* The content script runs on all Goofish pages and identifies prices in CNY.
+* It first applies the optional **20 CNY Superbuy Service Fee** to the item price if the setting is enabled.
+* **Conversion Logic based on Selected Rate Type:**
+    * **Standard, Wise, or Bank Transfer:** The total CNY price (item + optional fee) is divided by the corresponding, pre-calculated exchange rate.
+    * **Other Payment Types (Dynamic Fee):**
+        1.  The total CNY price (item + optional fee) is converted to a "Payable USD Amount" using the Standard Rate.
+        2.  The final **Actual Payment Amount (USD)** is calculated using the payment fee model: `(Payable USD Amount + $0.30) / 0.95`.
 
 ### 3. User Settings (`popup.html` / `popup.js`)
 
-* Clicking the extension icon opens a small popup window.
-* This window displays the currently active **Superbuy exchange rate**.
-* It provides a button to manually fetch the latest rate.
-* It also includes a checkbox to toggle the fee inclusion setting and instantly updates the prices to reflect with the fee on open Goofish pages.
+* The popup allows the user to:
+    * Select the desired conversion model (Standard, Wise, Bank Transfer, Other Payments).
+    * Toggle the **"Include Superbuy Fee (20 CNY)"** setting.
+    * Manually refresh the exchange rates.
 
 ---
 
 ## Usage and Settings
 
 1.  **Installation:** Install the extension in your preferred browser.
-2.  **Initial Setup:** The extension will automatically fetch the first Superbuy exchange rate upon startup.
-3.  **Manual Update:** Click the extension icon and press **"Update Now"** to manually refresh the rate, ensuring you have the latest Superbuy conversion value.
-4.  **Toggle Fee:** Use the **"Include Superbuy Fee (20 CNY)"** checkbox in the popup to decide if the 20 CNY service fee should be added to your calculated USD price. This setting is saved and persists across sessions, providing a better estimate of the final cost when using **Superbuy**.
+2.  **Select Rate Type:** Click the extension icon and use the **"Select Rate Type"** dropdown to choose the payment method you plan to use on **Superbuy** for the most accurate cost estimation.
+3.  **Toggle Fee:** Use the **"Include Superbuy Fee (20 CNY)"** checkbox to add the mandatory agent service fee to your calculated price.
+4.  **Update Manually:** Click **"Update Now"** to manually refresh the rates.
