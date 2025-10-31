@@ -45,18 +45,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Query tabs that match the goofish domain
         browser.tabs.query({ url: "*://*.goofish.com/*" }).then(tabs => {
             tabs.forEach(tab => {
-                // 1. Sende den Befehl zur Aktualisierung (enthält alle Informationen)
-                // Wir verwenden HIER IMMER den reconvert_live_rate Befehl für maximale Zuverlässigkeit,
-                // da er den content.js anweist, ALLE Einstellungen neu aus dem Storage zu laden.
+                // 1. Send the command for update (contains all information)
+                // We ALWAYS use the reconvert_live_rate command here for maximum reliability,
+                // as it instructs the content.js to reload ALL settings from storage.
                 browser.tabs.sendMessage(tab.id, { 
                     command: "reconvert_live_rate" 
                 }).catch(e => console.warn(`[POPUP] Full reconversion failed for tab ${tab.id}:`, e));
                 
-                // Hinweis: Der separate 'toggle_fee_live' Befehl ist jetzt redundant,
-                // da 'reconvert_live_rate' auch die Gebühr neu lädt. Zur Sicherheit/Kompatibilität 
-                // mit alten content.js Versionen könnte man ihn behalten, aber im finalen Code
-                // ist 'reconvert_live_rate' der einzige benötigte Befehl für Änderungen
-                // an Währung, Rate-Typ und Gebühr.
+                // Note: The separate 'toggle_fee_live' command is now redundant,
+                // as 'reconvert_live_rate' also reloads the fee. For safety/compatibility 
+                // with old content.js versions, it could be kept, but in the final code
+                // 'reconvert_live_rate' is the only needed command for changes
+                // to currency, Rate-Type, and fee.
             });
         });
     }
@@ -122,10 +122,10 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let defaultRateType;
 
-        // 1. Setzt die korrekten Rate-Optionen und Gebühren-Status
+        // 1. Sets the correct rate options and fee status
         if (newCode === 'CNY') {
-            // Die Checkbox bleibt jetzt AKTIVIERT, aber der Fee-Block wird optisch hervorgehoben
-            feeCheckbox.disabled = false; // <<< WICHTIG: NICHT DEAKTIVIEREN
+            // The checkbox now remains ENABLED, but the fee block is visually highlighted
+            feeCheckbox.disabled = false; // <<< IMPORTANT: DO NOT DISABLE
             feeCheckbox.parentElement.style.opacity = '1.0';
             
             rateSelector.innerHTML = CNYRateOptions; 
@@ -137,14 +137,14 @@ document.addEventListener('DOMContentLoaded', () => {
             defaultRateType = 'standard';
         }
         
-        // 2. Setzt den Rate Selector auf den Standardwert für die NEUE Währung.
+        // 2. Sets the Rate Selector to the default value for the NEW currency.
         if (shouldRestoreRate) {
              restoreOptions(false); 
         } else {
-             // Setzt den Selector direkt auf den neuen Standardwert (verhindert Konflikte)
+             // Sets the selector directly to the new default value (prevents conflicts)
              rateSelector.value = defaultRateType;
 
-             // Speichert den neuen Standard-Rate-Typ, da der alte ungültig ist.
+             // Saves the new default rate type, as the old one is invalid.
              browser.storage.local.set({ 
                  selectedRateType: defaultRateType
              }).catch(e => console.error("[POPUP] Error setting default rate type:", e));
@@ -162,23 +162,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const currentCode = result.targetCurrencyCode || 'USD';
                 
-                // Setzt die Währung im Selector
+                // Sets the currency in the selector
                 if (currencySelector.querySelector(`option[value="${currentCode}"]`)) {
                     currencySelector.value = currentCode;
                 } else if (currencySelector.options.length > 0) {
-                     // Fallback auf die erste geladene Währung (sollte CNY sein)
+                     // Fallback to the first loaded currency (should be CNY)
                      currencySelector.value = currencySelector.options[0].value;
                 } else {
-                    // Währungen wurden noch nicht geladen (sollte nach populateCurrencySelector nicht passieren)
+                    // Currencies not yet loaded (shouldn't happen after populateCurrencySelector)
                     return; 
                 }
 
-                // Aktualisiert die Raten-Optionen basierend auf der aktuellen Währung
+                // Updates the rate options based on the current currency
                 handleCurrencyChange(currencySelector.value, false); 
                 
                 const storedRateType = result.selectedRateType || 'standard';
                 
-                // Setzt den gespeicherten Rate-Typ
+                // Sets the saved rate type
                 if (rateSelector.querySelector(`option[value="${storedRateType}"]`)) {
                      rateSelector.value = storedRateType;
                 } else if (currencySelector.value === 'CNY') {
@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     rateSelector.value = 'standard';
                 }
 
-                // Zeigt den Status/Rate an
+                // Displays the status/rate
                 if (shouldRefetchRates) {
                    displayCurrentRate(); 
                 }
@@ -211,22 +211,22 @@ document.addEventListener('DOMContentLoaded', () => {
         let finalRateType = newRateType;
         
         if (currencyChanged) {
-            // Fall 1: Währung geändert
+            // Case 1: Currency changed
             
-            // 1a. Aktualisiert die UI (Optionen, Gebühr) und setzt den Rate-Typ auf den Standard der NEUEN Währung.
-            handleCurrencyChange(newCurrencyCode, false); // <--- HIER WIRD AUF 'standard' (für USD) ZURÜCKGESETZT
+            // 1a. Updates the UI (options, fee) and sets the rate type to the default of the NEW currency.
+            handleCurrencyChange(newCurrencyCode, false); // <--- HERE IT RESETS TO 'standard' (for USD)
             
-            // Da handleCurrencyChange den Rate-Typ im Storage aktualisiert, müssen wir ihn hier auch für die Benachrichtigung aktualisieren.
+            // Since handleCurrencyChange updates the rate type in storage, we must also update it here for the notification.
             finalRateType = (newCurrencyCode === 'CNY') ? 'cny_standard' : 'standard';
 
-            // 1b. Speichern des Gebührenstatus und der NEUEN Währung
+            // 1b. Save the fee status and the NEW currency
             browser.storage.local.set({ 
                 includeSuperbuyFee: includeFee, 
                 targetCurrencyCode: newCurrencyCode
-                // selectedRateType wird in handleCurrencyChange gesetzt!
+                // selectedRateType is set in handleCurrencyChange!
             })
             .then(() => {
-                // ... (Rest der Logik für Raten-Update im Hintergrund)
+                // ... (Rest of the logic for rate update in the background)
                 
                 rateStatusElement.textContent = `Currency changed to ${newCurrencyCode}. Updating rates...`;
                 rateStatusElement.classList.remove('success', 'error');
@@ -252,15 +252,15 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         } else {
-            // Fall 2: Rate-Typ oder Gebühr geändert
-            // 1. Speichern des neuen Rate-Typs und des Gebührenstatus
+            // Case 2: Rate type or fee changed
+            // 1. Save the new rate type and fee status
             browser.storage.local.set({ 
                 includeSuperbuyFee: includeFee, 
                 selectedRateType: newRateType 
-                // targetCurrencyCode bleibt unverändert
+                // targetCurrencyCode remains unchanged
             })
             .then(() => {
-                // 2. Content Scripts benachrichtigen und Status aktualisieren
+                // 2. Notify content scripts and update status
                 notifyContentScripts(finalRateType, includeFee, true); 
                 displayCurrentRate(); 
             })
@@ -289,30 +289,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 currencySelector.innerHTML = ''; 
                 
-                // 1. CNY-Option hinzufügen (always required)
+                // 1. Add CNY option (always required)
                 const cnyOption = document.createElement('option');
                 cnyOption.value = 'CNY';
                 cnyOption.textContent = 'CNY (Chinese Yuan)';
                 currencySelector.appendChild(cnyOption);
                 
-                // 2. Alle anderen Währungen hinzufügen
+                // 2. Add all other currencies
                 response.supportedCurrencies.forEach(currency => {
-                    // USD ist der Standard, aber wir nehmen ihn nur aus der Liste, wenn er nicht CNY ist
+                    // USD is the default, but we only take it from the list if it's not CNY
                     if (currency.code === 'CNY') return; 
 
                     const option = document.createElement('option');
                     option.value = currency.code;
-                    // Zeigt die Standardrate für jede Währung zur Information
+                    // Shows the standard rate for each currency for information
                     option.textContent = `${currency.code} (${currency.symbol || ''}) - 1 ${currency.code} ≈ ¥${currency.rate.toFixed(4)}`;
                     currencySelector.appendChild(option);
                 });
 
-                // 3. Nach dem Laden der Optionen: Gespeicherte Werte wiederherstellen und UI aktualisieren
+                // 3. After loading the options: Restore saved values and update UI
                 restoreOptions(true); 
             })
             .catch(error => {
                 console.error("[POPUP] Fatal Fetch Error:", error);
-                // WICHTIG: Zeigt den Fehler im Popup an, falls die Initialisierung fehlschlägt.
+                // IMPORTANT: Display the error in the popup if initialization fails.
                 rateStatusElement.textContent = "FATAL Error: Cannot load initial settings or communicate with API.";
                 rateStatusElement.classList.add('error');
             });
@@ -327,7 +327,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         const currentCurrencyCode = currencySelector.value;
 
-        // Sendet manuellen Update-Befehl an das Background-Script
+        // Send manual update command to the background script
         browser.runtime.sendMessage({ 
             command: "update_rate_manual", 
             targetCurrencyCode: currentCurrencyCode 
@@ -337,7 +337,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     throw new Error(response ? response.message : "No response received or unknown error.");
                 }
                 
-                // Erfolgsmeldung anzeigen
+                // Display success message
                 const code = response.code; 
                 const rate = response.rate;
                 let message = `Update Successful!`;
@@ -351,8 +351,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 rateStatusElement.textContent = message;
                 rateStatusElement.classList.add('success');
                 
-                // Aktualisiert den Status und benachrichtigt Content Scripts
-                restoreOptions(true); // Status/Rate anzeigen
+                // Update status and notify content scripts
+                restoreOptions(true); // Display status/rate
                 notifyContentScripts(rateSelector.value, feeCheckbox.checked, true); // true = Full Reconvert
                 
                 setTimeout(() => {
@@ -367,11 +367,11 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- 5. INITIALIZATION ---
-    // Startet den asynchronen Ladevorgang der Währungen und Einstellungen
+    // Starts the asynchronous loading of currencies and settings
     populateCurrencySelector();
     
-    // Fügt Listener für die UI-Elemente hinzu
+    // Adds listeners for the UI elements
     feeCheckbox.addEventListener('change', () => saveOptions(false));
     rateSelector.addEventListener('change', () => saveOptions(false)); 
-    currencySelector.addEventListener('change', () => saveOptions(true)); // Währungsänderung erfordert ein erneutes Abrufen der Rate
+    currencySelector.addEventListener('change', () => saveOptions(true)); // Currency change requires a new rate fetch
 });
