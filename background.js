@@ -251,13 +251,13 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 return updateExchangeRate(false, result.targetCurrencyCode || 'USD');
             })
             .then(response => {
-                // Stellt sicher, dass das finale Objekt die erwartete Struktur hat
+                // Ensures that the final object has the expected structure
                 if (response.supportedCurrencies) {
                      return response;
                 }
                 
-                // Fallback (wird nur erreicht, wenn updateExchangeRate keine supportedCurrencies zurückgibt)
-                // Wir nehmen an, der Standardfall ist USD und es ist erfolgreich.
+                // Fallback (only reached if updateExchangeRate returns no supportedCurrencies)
+                // We assume the default case is USD and it is successful.
                 return { 
                     success: true, 
                     supportedCurrencies: [{code: 'USD', symbol: '$', rate: response.rate || 6.8}], // Fallback USD
@@ -265,17 +265,17 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
                 };
             })
             .catch(error => {
-                // CRITICAL FIX: Wenn die gesamte Kette fehlschlägt (z.B. API-Fehler), 
-                // muss ein Objekt mit success: false zurückgegeben werden, damit popup.js 
-                // nicht hängt und eine Fehlermeldung anzeigen kann.
+                // CRITICAL FIX: If the entire chain fails (e.g., API error), 
+                // an object with success: false must be returned so that popup.js 
+                // doesn't hang and can display an error message.
                 console.error("[BG] Error fetching currency list for popup:", error);
                 return { success: false, message: "Error communicating with API or network failure." };
             });
         
-        // Sende das Ergebnis der Promise-Kette asynchron
+        // Send the result of the Promise chain asynchronously
         promiseChain.then(sendResponse);
         
-        // Signalisiere, dass die Antwort asynchron gesendet wird
+        // Signal that the response is sent asynchronously
         return true;
     }
 });
