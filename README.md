@@ -1,10 +1,10 @@
-# Goofish USD Price Converter
+# Goofish Price Converter
 
 ---
 
 ## Overview
 
-The **Goofish USD Price Converter** is a browser extension designed to enhance the shopping experience on goofish.com, particularly for users utilizing agent services like **Superbuy**. It automatically converts item prices listed in Chinese Yuan (CNY) into **US Dollars (USD)** directly on the product pages and search result listings. This provides instant visibility of the approximate USD cost without requiring manual calculations.
+The **Goofish Price Converter** is a browser extension designed to enhance the shopping experience on goofish.com, particularly for users utilizing agent services like **Superbuy**. It automatically converts item prices listed in Chinese Yuan (CNY) into **any supported currency** directly on the product pages and search result listings. This provides instant visibility of the approximate cost without requiring manual calculations.
 
 ---
 
@@ -21,7 +21,7 @@ The **Goofish USD Price Converter** is a browser extension designed to enhance t
 
 ## How It Works
 
-The extension is specifically tailored for the **Superbuy** ecosystem, ensuring the estimated USD price reflects the agent's operational environment and chosen payment method.
+The extension is specifically tailored for the **Superbuy** ecosystem, ensuring the estimated price reflects the agent's operational environment and chosen payment method.
 
 ### 1. Exchange Rate Management (`background.js`)
 
