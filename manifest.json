@@ -8,7 +8,7 @@
   },
   "browser_specific_settings": {
     "gecko": {
-      "id": "goofish-price-converter@yuugi.dev",
+      "id": "goofish-usd-converter@yuugi.dev",
 	  "data_collection_permissions": {
         "required": [
           "none"
