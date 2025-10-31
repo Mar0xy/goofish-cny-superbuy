@@ -16,9 +16,9 @@
         input[type="checkbox"] { margin-right: 8px; transform: scale(1.1); vertical-align: middle; }
         .info-text { font-size: 0.8em; color: #666; margin-left: 20px; margin-top: 2px; }
 
-        /* NEW: Rate Selector Styling */
-        #rateSelectorBlock { margin-bottom: 15px; }
-        #rateSelector { 
+        /* NEW: Selector Styling */
+        .selector-group { margin-bottom: 15px; }
+        select { 
             width: 100%; 
             padding: 8px; 
             border: 1px solid #ccc; 
@@ -64,15 +64,17 @@
         </p>
     </div>
 
-    <h2>Exchange Rate</h2>
+    <h2>Target Currency: <span id="currentCurrencyCode">USD</span></h2>
+    
+    <div class="selector-group">
+        <label for="currencySelector">Select Currency:</label>
+        <select id="currencySelector"></select>
+    </div>
 
-    <div id="rateSelectorBlock">
-        <label for="rateSelector">Select Rate Type:</label>
+    <div id="rateSelectorBlock" class="selector-group">
+        <label for="rateSelector">Select Conversion Type:</label>
         <select id="rateSelector">
-            <option value="standard">Standard Exchange Rate</option>
-            <option value="wise">Wise Remittance Rate</option>
-            <option value="transfer">Bank Transfer Rate</option>
-            <option value="other_payments">Other Payment Types (Dynamic Fee)</option> </select>
+             </select>
     </div>
 
     <div id="rateStatus">Loading Status...</div>

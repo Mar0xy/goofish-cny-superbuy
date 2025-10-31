@@ -1,396 +1,393 @@
-// content.js (FINAL: Smart Live Update - Text-Only Update on Fee/Rate Toggle, including Dynamic Rate)
+// content.js (FINAL: Crash Fix & Multi-Currency Support + CNY Alipay Logic + Styling)
+
+// --- CSS STYLING FÜR KONVERTIERTE PREISE ---
+const CONVERTED_PRICE_STYLE = `
+    .converted-price-display {
+        display: inline-block;
+        font-size: 1.1em; /* Macht den Preis etwas größer */
+        font-weight: bold;
+        color: #007bff; /* Ein helles Blau (wie im Popup) */
+        background-color: #f0f8ff; /* Sehr heller Hintergrund zur Hervorhebung */
+        padding: 2px 5px;
+        border-radius: 4px;
+        margin-left: 5px;
+        line-height: 1.2;
+        text-wrap: nowrap;
+    }
+    /* Fügt einen klaren Trennstrich zum Originalpreis hinzu */
+    .converted-price-display:before {
+        content: ' / ';
+        color: #999; /* Grauer Trennstrich */
+        font-weight: normal;
+        font-size: 0.9em;
+        margin-right: 5px;
+    }
+    
+    /* 2. Vertikale Positionierung des konvertierten Preises INNERHALB DIESES EINEN CONTAINERS */
+    .right-card-main-img--iGIzt9Py .converted-price-display {
+        position: absolute; /* Muss absolut sein, da der Elternteil relativ ist */
+        top: 122%; /* Positioniert es direkt unter dem Originalpreis */
+        left: 12%; 
+        margin-left: 0 !important; /* Entfernt den seitlichen Standardabstand */
+        margin-top: 5px; /* Vertikaler Abstand zum Originalpreis */
+    }
+
+    /* 3. Entfernt den Trennstrich für das vertikale Layout */
+    .right-card-main-img--iGIzt9Py .converted-price-display:before {
+        content: ''; 
+        display: none;
+    }
+`;
+
+/**
+ * Injects CSS styles into the document head to style the converted prices.
+ */
+function injectStyles() {
+    if (document.getElementById('converter-styles')) return;
+
+    const styleElement = document.createElement('style');
+    styleElement.id = 'converter-styles';
+    styleElement.textContent = CONVERTED_PRICE_STYLE;
+    document.head.appendChild(styleElement);
+}
+
+// Stellt sicher, dass die Styles bei jedem Seitenaufruf eingefügt werden
+injectStyles();
+
 
 // Selectors for inner price wrappers
 const PRICE_PARTS_SELECTORS = [
     '.value--EyQBSInp', 
     '.price-wrap--YzmU5cUl',
-    '.right-card-main-price--BRE5MkOF' 
+	'.right-card-main-img--iGIzt9Py'
 ];
 
 // Regex for simple prices (e.g., in body text, discount boxes)
 const SIMPLE_PRICE_REGEX = /(¥|元|￥)\s*(\d[\d,.]*)/g; 
 
-let conversionRates = {}; // { standard: 6.8, wise: 6.7, transfer: 6.7 }
+let conversionRates = {}; 
 let selectedRateType = 'standard';
 let isModifyingDOM = false;
 let includeSuperbuyFee = false;
 const SUPERBUY_FEE_CNY = 20; 
+const ALIPAY_FEE_PERCENT = 0.03;
+
+let targetCurrencySymbol = '$'; 
+let targetCurrencyCode = 'USD';
+let currentStoredSelectedRateType = 'standard'; 
 
 // --- HELPER FUNCTIONS FOR PRICE CALCULATION ---
 
 /**
- * Creates the converted USD text based on price and conversion type.
+ * Creates the converted text based on price and conversion type.
+ * @param {number} cnyPrice - The original price in CNY.
+ * @param {boolean} isTextNodeConversion - True if converting a raw text node price (adds "~").
+ * @returns {string} The formatted price string in the target currency.
  */
 function getUsdText(cnyPrice, isTextNodeConversion) {
-    const standardRate = conversionRates['standard'];
-    if (!standardRate) return '';
-    
     let cnyPriceToConvert = cnyPrice;
     
-    // 1. Apply optional Superbuy Fee first, if enabled (applies to all methods)
-    if (includeSuperbuyFee) {
+    // Die Superbuy-Gebühr wird nur für USD/andere Währungen zur Konvertierung hinzugefügt.
+    if (targetCurrencyCode !== 'CNY' && includeSuperbuyFee) {
         cnyPriceToConvert += SUPERBUY_FEE_CNY;
     }
 
-    let usdPrice;
-    let usdText;
-    
-    if (selectedRateType === 'other_payments') {
-        const FIXED_FEE = 0.3; // USD
-        const PERCENTAGE_FEE = 0.05; // 5%
+    // --- A. CNY Target Conversion Logic (FIXED: Alipay Fee Calculation & Styling) ---
+    if (targetCurrencyCode === 'CNY') {
+        let finalDisplayPrice = cnyPrice; 
+        let titleSuffix = '';
+        let displaySuffix = '';
+        let totalAddedFee = 0; 
+        
+        // 1. Superbuy Fee (pauschal 20 CNY)
+        // Gebühr wird zur ANZEIGE hinzugefügt (nicht zur Konvertierung, da 1:1)
+        if (includeSuperbuyFee) {
+            finalDisplayPrice += SUPERBUY_FEE_CNY;
+            totalAddedFee += SUPERBUY_FEE_CNY;
+            titleSuffix += ` (Inkl. ¥${SUPERBUY_FEE_CNY} Superbuy Gebühr)`;
+        }
+        
+        // 2. Alipay Fee (3% bei cny_alipay und Preis > 200 CNY)
+        // Die Gebühr wird auf den Originalpreis angewendet.
+        if (currentStoredSelectedRateType === 'cny_alipay' && cnyPrice > 200) {
+            const alipayFee = cnyPrice * ALIPAY_FEE_PERCENT; 
+            finalDisplayPrice += alipayFee;
+            totalAddedFee += alipayFee;
+            
+            titleSuffix += ` (+ ¥${alipayFee.toFixed(2)} Alipay Gebühr)`;
+        }
+        
+        // 3. Finaler Display Suffix (zeigt alle hinzugefügten Gebühren an)
+        if (totalAddedFee > 0) {
+            // Zeigt die Summe der Gebühren im sichtbaren Text an.
+            displaySuffix = ` (+¥${totalAddedFee.toFixed(2)} Fee)`; 
+        }
 
-        // Step A: Convert total CNY (item + optional Superbuy fee) to USD Payable Amount using the Standard Rate
-        const usdPayableAmount = cnyPriceToConvert / standardRate;
+        // Der angezeigte Text enthält den Endpreis (inkl. Gebühr) und den Gebühren-Hinweis
+        const cnyDisplay = `¥${finalDisplayPrice.toFixed(2)}${displaySuffix}`;
+        const titleText = `Original: ¥${cnyPrice.toFixed(2)}${titleSuffix}`;
         
-        // Step B: Calculate the Actual payment amount (Final USD Price) using the "Other Payment" formula
-        // Formula: Actual payment amount (USD) = (Payable (USD) + Fixed Fee) / (1 - Percentage Fee)
-        usdPrice = (usdPayableAmount + FIXED_FEE) / (1 - PERCENTAGE_FEE);
-        
-        // Text display includes a note about the calculation model
-        const feeNote = includeSuperbuyFee ? `, Agent Fee Incl.` : '';
-        usdText = isTextNodeConversion
-            ? ` (~$${usdPrice.toFixed(2)}, Other Model${feeNote})`
-            : `$${usdPrice.toFixed(2)} (Other Model${feeNote})`;
-        
-    } else {
-        // Use the selected remittance rate (standard, wise, transfer)
-        const rateToUse = conversionRates[selectedRateType] || standardRate;
-        
-        usdPrice = cnyPriceToConvert / rateToUse; 
-        
-        // Text display uses the original format for standard/remittance rates
-        // Note: cnyPriceToConvert already includes the optional Superbuy Fee if toggled
-        const feeNote = includeSuperbuyFee ? `, Fee Incl. ¥${cnyPriceToConvert.toFixed(2)}` : '';
-        usdText = isTextNodeConversion
-            ? ` (~$${usdPrice.toFixed(2)}${feeNote})`
-            : `$${usdPrice.toFixed(2)}${feeNote}`;
+        // WICHTIG: Füge die Klasse "converted-price-display" hinzu, um das Styling und
+        // die korrekte Entfernung durch removeConvertedElements zu gewährleisten.
+        return `<span title="${titleText}" class="converted-price-display">${cnyDisplay}</span>`;
+    }
+
+    // --- B. Non-CNY Target Conversion Logic (e.g., USD) ---
+    const standardRate = conversionRates['standard'];
+    if (!standardRate) {
+         const titleText = "Error: Exchange rate data missing.";
+         return `<span title="${titleText}" class="converted-price-display">Error!</span>`;
     }
     
-    return usdText;
+    let usdPrice;
+    let rateUsedDescription;
+
+    if (selectedRateType === 'other_payments') {
+        const FIXED_FEE = 0.30;
+        const FEE_PERCENT = 0.05; 
+        
+        // cnyPriceToConvert enthält bereits die Superbuy Fee, falls ausgewählt
+        const payableUsdAmount = cnyPriceToConvert / standardRate;
+        usdPrice = (payableUsdAmount + FIXED_FEE) / (1 - FEE_PERCENT); 
+        rateUsedDescription = `Dynamic Fee (Standard Rate: ¥${standardRate.toFixed(4)})`;
+    } else {
+        const rate = conversionRates[selectedRateType];
+        if (!rate) {
+            usdPrice = cnyPriceToConvert / standardRate;
+            rateUsedDescription = `STANDARD (Fallback): 1 ${targetCurrencyCode} ≈ ¥${standardRate.toFixed(4)}`;
+        } else {
+            usdPrice = cnyPriceToConvert / rate;
+            rateUsedDescription = `${selectedRateType}: 1 ${targetCurrencyCode} ≈ ¥${rate.toFixed(4)}`;
+        }
+    }
+    
+    // Generate Text and Title
+    const finalUsdText = `${targetCurrencySymbol}${usdPrice.toFixed(2)}`;
+    const titleText = `Konvertiert: ${finalUsdText}\nRate: ${rateUsedDescription}\nOriginal: ¥${cnyPrice.toFixed(2)}${includeSuperbuyFee ? ` + ¥${SUPERBUY_FEE_CNY} Gebühr` : ''}`;
+
+    // Rückgabe des gestylten <span>-Elements
+    return `<span title="${titleText}" class="converted-price-display">${finalUsdText}</span>`;
 }
 
-
-// --- HELPER FUNCTIONS FOR DOM MANIPULATION ---
+// --- DOM MANIPULATION AND CONVERSION CORE ---
 
 /**
- * Removes all USD price displays added by this extension.
+ * Main conversion function. Iterates through all potential price containers.
  */
-function removeExistingConversions() {
+function parseAndConvertPrice() {
     isModifyingDOM = true;
     
-    document.querySelectorAll('[data-converted-multi="true"]').forEach(el => {
-        el.removeAttribute('data-converted-multi');
+    // 1. Handle main price wrappers (e.g., product page price, card prices)
+    PRICE_PARTS_SELECTORS.forEach(selector => {
+        document.querySelectorAll(selector).forEach(element => {
+            
+            // NUR konvertieren, wenn noch NICHT geschehen
+            if (element.hasAttribute('data-converted')) {
+                return;
+            }
+
+            // NEUE LOGIK:
+            // Versuche, den Preis direkt aus dem gesamten Text des Containers zu extrahieren.
+            // Dies ist robuster, da es nicht von der genauen Struktur der Kind-Knoten abhängt.
+            const text = element.textContent.trim();
+            
+            // Regex, um ¥ gefolgt von Zahlen (mit Kommas oder Punkten) zu finden
+            const match = text.match(/¥\s*([\d,.]+)/);
+            
+            if (match) {
+                // match[1] ist die extrahierte Preisnummer (z.B. "123.45")
+                const price = parseFloat(match[1].replace(/,/g, ''));
+                
+                if (!isNaN(price) && price > 0) {
+                    const usdText = getUsdText(price, false);
+                    
+                    // Fügt den konvertierten Preis-Text als Geschwisterelement des Originalpreises hinzu
+                    // 'beforeend' funktioniert gut, da es im CSS gezielt positioniert wird.
+                    element.insertAdjacentHTML('beforeend', usdText);
+                    element.setAttribute('data-converted', 'true');
+                }
+            }
+
+            // // Alte Logik: Findet den spezifischen Text-Container. (Wurde ersetzt/vereinfacht)
+            // const priceTextContainer = Array.from(element.childNodes).find(node => 
+            //     // Prüft den Haupt-Textknoten des Containers ODER ein span/div-Kindelement
+            //     (node.nodeType === 3 && node.textContent.includes('¥')) || 
+            //     (node.nodeType === 1 && node.textContent.includes('¥'))
+            // );
+            
+            // if (priceTextContainer) {
+            //     const text = priceTextContainer.textContent.trim();
+            //     const match = text.match(/¥([\d,.]+)/);
+                
+            //     // Nur konvertieren, wenn noch nicht geschehen
+            //     if (match && !element.hasAttribute('data-converted')) {
+            //         // ... (Rest der alten Logik) ...
+            //     }
+            // }
+
+        });
     });
 
-    document.querySelectorAll('[data-converted-usd="true"]').forEach(el => {
-        try {
-            el.remove();
-        } catch(e) {
-            console.error("[CONTENT] Error removing old conversions:", e);
+    // 2. Handle raw text conversions (e.g., in description, search results, etc.)
+    // DIESER TEIL BLEIBT UNVERÄNDERT, DA ER BEREITS TEXT-KNOTEN VERARBEITET
+    const treeWalker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_TEXT,
+        { 
+            acceptNode: (node) => {
+                // Ignore nodes inside already converted elements, scripts, or styles
+                if (node.parentElement && node.parentElement.closest('[data-converted], script, style, .converted-price-display')) {
+                    return NodeFilter.FILTER_SKIP;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        },
+        false
+    );
+
+    let node;
+    while (node = treeWalker.nextNode()) {
+        if (node.textContent.match(SIMPLE_PRICE_REGEX)) {
+            let originalText = node.textContent;
+            let newText = originalText;
+            let changesMade = false;
+
+            newText = newText.replace(SIMPLE_PRICE_REGEX, (match, symbol, value) => {
+                const price = parseFloat(value.replace(/,/g, ''));
+                if (!isNaN(price)) {
+                    // Check if conversion already exists next to it (basic check)
+                    if (node.nextElementSibling && node.nextElementSibling.classList.contains('converted-price-display')) {
+                        return match; // Already converted, skip
+                    }
+                    
+                    const usdText = getUsdText(price, true);
+                    changesMade = true;
+                    // Inject the HTML after the current text node
+                    const spanWrapper = document.createElement('span');
+                    spanWrapper.innerHTML = usdText;
+                    node.parentNode.insertBefore(spanWrapper, node.nextSibling);
+                    return match; // Return original match, but now followed by the new span
+                }
+                return match;
+            });
+
+            // If changes were made, we don't need to update the text content of the node itself
+            // since we inserted a new element next to it.
         }
-    });
-
+    }
+    
     isModifyingDOM = false;
 }
 
 
 /**
- * Extracts the full CNY price from a container.
+ * Removes all previously injected converted price elements.
  */
-function extractCnyPrice(priceContainer) {
-    let priceString = '';
-    let foundSymbol = false;
-    let foundNumber = false;
-
-    priceContainer.childNodes.forEach(child => {
-        if (child.nodeType === 1) { 
-            const text = child.textContent.trim();
-            
-            if (text.match(/^(¥|元|￥)$/)) {
-                foundSymbol = true;
-            } 
-            else if (text.match(/^[\d,.]+$/)) {
-                priceString += text.replace(/,/g, '');
-                foundNumber = true;
-            }
-        }
-    });
-
-    if (foundSymbol && foundNumber && priceString.length > 0) {
-        return parseFloat(priceString);
-    }
-    return null;
-}
-
-/**
- * Handles all nested price structures.
- */
-function handleMultiPartPrice(scopeNode) {
-    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
+function removeConvertedElements() {
+    isModifyingDOM = true;
     
-    scopeNode.querySelectorAll(PRICE_PARTS_SELECTORS.join(', ')).forEach(priceContainer => {
-        if (priceContainer.getAttribute('data-converted-multi') === 'true') {
-            return;
-        }
+    // Remove injected elements (the <span> with the new class)
+    document.querySelectorAll('.converted-price-display').forEach(el => el.remove());
 
-        const cnyPrice = extractCnyPrice(priceContainer);
-
-        if (cnyPrice !== null && cnyPrice > 0) {
-            
-            const usdText = getUsdText(cnyPrice, false); // isTextNodeConversion = false
-            
-            const usdSpan = document.createElement('span');
-            usdSpan.textContent = usdText;
-            usdSpan.setAttribute('data-converted-usd', 'true');
-            usdSpan.setAttribute('data-cny-price', cnyPrice.toString()); // Save original price
-            
-            // --- STYLING LOGIC ---
-            if (priceContainer.classList.contains('right-card-main-price--BRE5MkOF')) {
-                usdSpan.style.position = 'absolute';
-                usdSpan.style.bottom = '-15.8px'; 
-                usdSpan.style.left = '50%';
-                usdSpan.style.transform = 'translateX(-50%)';
-                usdSpan.style.zIndex = '10'; 
-                usdSpan.style.whiteSpace = 'nowrap';
-                
-                usdSpan.style.fontSize = '9px'; 
-                usdSpan.style.fontWeight = 'bold';
-                usdSpan.style.color = '#fff'; 
-                usdSpan.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-                usdSpan.style.padding = '2px 4px';
-                usdSpan.style.borderRadius = '3px';
-                
-                isModifyingDOM = true;
-                try {
-                     priceContainer.appendChild(usdSpan);
-                } catch(e) { console.error("[CONTENT] Error during DOM modification:", e); }
-                finally {
-                     isModifyingDOM = false;
-                }
-
-            } else {
-                usdSpan.style.fontSize = '12px';
-                usdSpan.style.color = '#fff';   
-                usdSpan.style.backgroundColor = '#666';
-                usdSpan.style.padding = '2px 4px';
-                usdSpan.style.borderRadius = '3px';
-                usdSpan.style.marginLeft = '4px';
-                usdSpan.style.display = 'inline-block'; 
-
-                isModifyingDOM = true;
-                try {
-                    priceContainer.parentNode.insertBefore(usdSpan, priceContainer.nextSibling);
-                } catch(e) { console.error("[CONTENT] Error during DOM modification:", e); }
-                finally {
-                     isModifyingDOM = false;
-                }
-            }
-
-            priceContainer.setAttribute('data-converted-multi', 'true');
-        }
-    });
-}
-
-
-/**
- * Converts prices found within a text node.
- */
-function convertPriceInTextNode(textNode) {
-    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
-
-    const originalText = textNode.textContent;
-    let lastIndex = 0;
-    const fragment = document.createDocumentFragment();
-    let match;
-    let convertedCount = 0;
-
-    SIMPLE_PRICE_REGEX.lastIndex = 0;
-
-    while ((match = SIMPLE_PRICE_REGEX.exec(originalText)) !== null) {
-        const fullMatch = match[0];
-        const priceString = match[2]; 
-
-        if (match.index > lastIndex) {
-            fragment.appendChild(document.createTextNode(originalText.substring(lastIndex, match.index)));
-        }
-
-        const cnyPrice = parseFloat(priceString.replace(/,/g, ''));
-        
-        if (isNaN(cnyPrice) || cnyPrice <= 0) {
-            fragment.appendChild(document.createTextNode(fullMatch));
-        } else {
-            fragment.appendChild(document.createTextNode(fullMatch));
-            
-            const usdText = getUsdText(cnyPrice, true); // isTextNodeConversion = true
-            
-            const usdSpan = document.createElement('span');
-            usdSpan.textContent = usdText;
-            usdSpan.setAttribute('data-converted-usd', 'true');
-            usdSpan.setAttribute('data-cny-price', cnyPrice.toString()); // Save original price
-            usdSpan.style.fontWeight = 'bold';
-            fragment.appendChild(usdSpan);
-            convertedCount++;
-        }
-
-        lastIndex = match.index + fullMatch.length;
-    }
-
-    if (lastIndex < originalText.length) {
-        fragment.appendChild(document.createTextNode(originalText.substring(lastIndex)));
-    }
-
-    if (convertedCount > 0) {
-        isModifyingDOM = true;
-        try {
-            textNode.parentNode.replaceChild(fragment, textNode); 
-        } catch (e) {
-            console.error("[CONTENT] Error during DOM modification:", e);
-        } finally {
-            isModifyingDOM = false;
-        }
-    }
-}
-
-
-// --- DOM Processing and Observer ---
-
-function processNode(node) {
-    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
-
-    if (node.nodeType === 1 && node.getAttribute('data-converted-usd') === 'true') {
-        return;
-    }
-
-    if (node.nodeType === 1 && node.nodeName !== 'SCRIPT' && node.nodeName !== 'STYLE') {
-        
-        if (node.matches(PRICE_PARTS_SELECTORS.join(', '))) {
-            handleMultiPartPrice(node);
-        }
-
-        node.childNodes.forEach(child => {
-            processNode(child);
+    // Remove the 'data-converted' attribute from main wrappers
+    PRICE_PARTS_SELECTORS.forEach(selector => {
+        document.querySelectorAll(`${selector}[data-converted='true']`).forEach(element => {
+            element.removeAttribute('data-converted');
         });
-    }
-
-    if (node.nodeType === 3 && node.textContent.trim().length > 0) {
-        if (!node.parentNode || node.parentNode.getAttribute('data-converted-usd') !== 'true') {
-            convertPriceInTextNode(node);
-        }
-    }
-}
-
-/**
- * Updates only the text content of existing USD spans (non-destructively).
- */
-function updateOnlyUsdText() {
-    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') return;
-    
-    document.querySelectorAll('[data-converted-usd="true"]').forEach(usdSpan => {
-        const cnyPriceAttr = usdSpan.getAttribute('data-cny-price');
-        if (!cnyPriceAttr) return; 
-
-        const cnyPrice = parseFloat(cnyPriceAttr);
-        if (isNaN(cnyPrice)) return;
-
-        // Determine if it was a text node conversion (with "~")
-        const isTextNodeConversion = usdSpan.textContent.includes(' (~'); 
-
-        const usdText = getUsdText(cnyPrice, isTextNodeConversion);
-        
-        isModifyingDOM = true;
-        try {
-            usdSpan.textContent = usdText; // ONLY update the text content
-        } catch(e) {
-             console.error("[CONTENT] Error during text update:", e);
-        } finally {
-            isModifyingDOM = false;
-        }
     });
     
-    console.log(`[$] Live Update (Text-Only) performed. Rate Type: ${selectedRateType}. Superbuy Fee: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
+    isModifyingDOM = false;
 }
 
-
 /**
- * Forces reconversion of all prices based on the current fee/rate.
- * Performs a text-only update for live changes.
+ * Forces a removal of old prices and a full reconversion.
  */
 function forceReconversion() {
-    if (!conversionRates[selectedRateType] && selectedRateType !== 'other_payments') {
-        console.warn("[$] Rate not available for selected type, cannot update live.");
-        return;
-    }
-
-    // If converted spans already exist, do NOT perform the destructive scan,
-    // but only the text update.
-    if (document.querySelector('[data-converted-usd="true"]')) {
-        updateOnlyUsdText();
-        return;
-    }
-    
-    // Otherwise (Initial conversion), perform the full scan.
-    removeExistingConversions();
-    processNode(document.body);
-    handleMultiPartPrice(document.body);
-    
-    console.log(`[$] Full Scan performed (Initial conversion). Rate Type: ${selectedRateType}. Superbuy Fee: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
+    removeConvertedElements();
+    parseAndConvertPrice();
 }
 
-function startObserver() {
-    if (!conversionRates['standard'] && selectedRateType === 'other_payments') {
-        // If 'other_payments' is selected, we need the standard rate for calculation
-        console.warn("[$] Standard Exchange rate not available yet. Retrying...");
-        setTimeout(startObserver, 500); 
+
+// --- MUTATION OBSERVER ---
+
+const observerConfig = {
+    childList: true,
+    subtree: true,
+    attributes: false,
+    characterData: false
+};
+
+const observer = new MutationObserver((mutationsList, observer) => {
+    if (isModifyingDOM) {
         return;
     }
     
-    console.log("[$] Goofish USD Converter is active.");
-    console.log(`[$] Selected Rate Type: ${selectedRateType}. Superbuy Fee (20 CNY) is: ${includeSuperbuyFee ? 'INCLUDED' : 'EXCLUDED'}.`);
-
-    processNode(document.body);
-    handleMultiPartPrice(document.body); 
-
-    const observer = new MutationObserver((mutationsList, observer) => {
-        if (isModifyingDOM) {
-            return;
-        }
-        
-        for (const mutation of mutationsList) {
-            if (mutation.type === 'childList') {
-                mutation.addedNodes.forEach(node => {
-                    if (node.nodeType === 1) {
-                        processNode(node);
-                        handleMultiPartPrice(node);
-                    }
-                });
+    let shouldConvert = false;
+    
+    for (const mutation of mutationsList) {
+        if (mutation.type === 'childList' && mutation.addedNodes.length > 0) {
+            // Check if any added node is a potential price container
+            const addedPriceContainer = Array.from(mutation.addedNodes).some(node => 
+                node.nodeType === 1 && (
+                    PRICE_PARTS_SELECTORS.some(selector => node.matches(selector)) ||
+                    node.querySelector(PRICE_PARTS_SELECTORS.join(','))
+                )
+            );
+            
+            if (addedPriceContainer) {
+                shouldConvert = true;
+                break;
             }
         }
-    });
+    }
 
-    const config = { childList: true, subtree: true };
-    observer.observe(document.body, config);
+    if (shouldConvert) {
+        // Debounce or rate-limit the conversion process
+        setTimeout(parseAndConvertPrice, 50); 
+    }
+});
+
+function startObserver() {
+    // Initial scan
+    parseAndConvertPrice(); 
+    
+    // Start observing the body for changes
+    observer.observe(document.body, observerConfig);
 }
 
 
-// --- Main Execution and Message Listener ---
+// --- MESSAGE HANDLER & INITIALIZATION ---
 
-browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    // 1. Live update for the fee toggle
-    if (request.command === "toggle_fee_live" && request.newFeeStatus !== undefined) {
-        includeSuperbuyFee = request.newFeeStatus; 
+browser.runtime.onMessage.addListener(async (request, sender, sendResponse) => {
+    // 1. Live update for the fee status
+    if (request.command === "toggle_fee_live") {
+        includeSuperbuyFee = request.newFeeStatus === true;
+        // Beim Umschalten der Gebühr MUSS eine Neukonvertierung stattfinden
         forceReconversion(); 
         sendResponse({ success: true });
-        return true;
+        return true; 
     }
     
-    // 2. Live update for the selected rate type
-    if (request.command === "set_rate_type" && request.newRateType !== undefined) {
-         browser.storage.local.get("conversionRates")
+    // 2. Live update for the rate type
+    if (request.command === "change_rate_type_live") {
+        // WICHTIG: ALLE für die Konvertierung relevanten Werte MÜSSEN neu geladen werden,
+        // da der Rate-Type oft im Popup geändert wird, ohne dass Raten neu geladen wurden.
+        browser.storage.local.get(["conversionRates", "selectedRateType", "targetCurrencySymbol", "targetCurrencyCode", "includeSuperbuyFee"])
           .then(data => {
-            // Only require a rate if the selected type is NOT the dynamic one, or if we need the standard rate for the calculation
-            if (data.conversionRates && (data.conversionRates[request.newRateType] || request.newRateType === 'other_payments')) {
-              conversionRates = data.conversionRates;
-              selectedRateType = request.newRateType; 
+            const currentType = data.selectedRateType || 'standard';
+            const currentCode = data.targetCurrencyCode || 'USD';
+            
+            // Check if the rate is available or if it's the dynamic/CNY type
+            if (data.conversionRates || currentType === 'other_payments' || currentCode === 'CNY') {
+              conversionRates = data.conversionRates || {}; 
+              selectedRateType = currentType; 
+              targetCurrencySymbol = data.targetCurrencySymbol || '$';
+              targetCurrencyCode = currentCode; 
+              includeSuperbuyFee = data.includeSuperbuyFee === true;
+              // NEU/WICHTIG: currentStoredSelectedRateType muss gesetzt werden, da es in getUsdText verwendet wird!
+              currentStoredSelectedRateType = currentType; 
+              
+              // 2. Erzwungene Neukonvertierung ausführen
               forceReconversion(); 
               sendResponse({ success: true });
             } else {
@@ -400,30 +397,50 @@ browser.runtime.onMessage.addListener((request, sender, sendResponse) => {
         return true; 
     }
     
-    // 3. Live update for the exchange rates (manual rate refresh)
+    // 3. Live update for the exchange rates (manual rate refresh or option change)
     if (request.command === "reconvert_live_rate") {
-        browser.storage.local.get(["conversionRates", "selectedRateType"])
+        // WICHTIG: ALLE für die Konvertierung relevanten Werte MÜSSEN neu geladen werden!
+        browser.storage.local.get(["conversionRates", "selectedRateType", "targetCurrencySymbol", "targetCurrencyCode", "includeSuperbuyFee"])
           .then(data => {
-            if (data.conversionRates && (data.conversionRates[data.selectedRateType] || data.selectedRateType === 'other_payments')) {
-              conversionRates = data.conversionRates; 
-              selectedRateType = data.selectedRateType; 
+            const currentType = data.selectedRateType || 'standard';
+            const currentCode = data.targetCurrencyCode || 'USD';
+            
+            if (data.conversionRates || currentCode === 'CNY') {
+              // 1. Lokale Variablen mit den NEUEN Werten aus dem Storage aktualisieren
+              conversionRates = data.conversionRates || {}; 
+              selectedRateType = currentType; 
+              targetCurrencySymbol = data.targetCurrencySymbol || '$';
+              targetCurrencyCode = currentCode; 
+              includeSuperbuyFee = data.includeSuperbuyFee === true; 
+              // NEU/WICHTIG: currentStoredSelectedRateType muss gesetzt werden, da es in getUsdText verwendet wird!
+              currentStoredSelectedRateType = currentType; 
+              
+              // 2. Erzwungene Neukonvertierung ausführen
               forceReconversion(); 
               sendResponse({ success: true });
             } else {
               sendResponse({ success: false, message: "Rates not found in storage." });
             }
+          })
+          .catch(error => {
+              console.error("[$] Error during live reconversion fetch:", error);
+              sendResponse({ success: false, message: "Error reading storage for reconversion." });
           });
         return true; 
     }
 });
 
-browser.storage.local.get(["conversionRates", "includeSuperbuyFee", "selectedRateType"])
+// WICHTIG: Initialisierungsblock am Ende der Datei muss alle globalen Variablen setzen.
+browser.storage.local.get(["conversionRates", "includeSuperbuyFee", "selectedRateType", "targetCurrencySymbol", "targetCurrencyCode"])
   .then(data => {
     conversionRates = data.conversionRates || {};
     includeSuperbuyFee = data.includeSuperbuyFee === true; 
     selectedRateType = data.selectedRateType || 'standard'; 
+    targetCurrencySymbol = data.targetCurrencySymbol || '$';
+    targetCurrencyCode = data.targetCurrencyCode || 'USD';
+    currentStoredSelectedRateType = selectedRateType; // <- DIESE IST KRITISCH FÜR DEN LAUF
     startObserver();
   })
   .catch(error => {
-    console.error("[$] Error fetching settings:", error);
+    console.error("[$] Error fetching settings on load:", error);
   });
